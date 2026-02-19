@@ -1,0 +1,84 @@
+# Importing standard libraries
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import tensorflow as tf
+
+# Optional: prevent TensorFlow from using GPU (for debugging or testing)
+tf.config.set_visible_devices([], 'GPU')
+
+# Check how many GPUs are available
+print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
+
+import pandas as pd
+import zipfile
+from google.colab import drive
+
+drive.mount('/content/drive')  # מחבר את הדרייב, יווצר קישור לנתיב /content/drive
+
+import zipfile
+
+zip_file = '/content/drive/MyDrive/Content/CNN-MASK-VISION.zip'  # הנתיב לקובץ הדחוס בדרייב
+
+with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+  zip_ref.extractall('/content/dataset')  # חילוץ הקבצים לתיקייה חדשה
+
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+# Training data generator with augmentation and validation split
+train_datagen = ImageDataGenerator(
+    rescale=1./255,         # Normalize pixel values to [0,1] — helps speed up training and stabilize gradients
+    shear_range=0.2,        # Apply a slight diagonal transformation (shear) — simulates natural changes in camera angle
+    zoom_range=0.2,         # Apply random zoom-in effect — helps the model recognize objects at different scales
+    horizontal_flip=True,   # Flip images horizontally — helps the model handle symmetry (e.g., cat facing left or right)
+    validation_split=0.2    # Dedicate 20% of the data for validation
+)
+
+# Testing data generator (only normalization, no augmentation, will be used for validation subset)
+test_datagen = ImageDataGenerator(rescale=1./255, validation_split=0.2)
+
+from keras.models import Sequential
+from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+
+cnn = Sequential()
+
+# שכבת קונבולוציה ראשונה
+cnn.add(Conv2D(filters=32, kernel_size=3, activation='relu', input_shape=[64, 64, 3]))
+cnn.add(MaxPooling2D(pool_size=2, strides=2))
+
+# שכבת קונבולוציה שנייה
+cnn.add(Conv2D(filters=32, kernel_size=3, activation='relu'))
+cnn.add(MaxPooling2D(pool_size=2, strides=2))
+
+# Flatten
+cnn.add(Flatten())
+
+# Fully Connected
+cnn.add(Dense(units=128, activation='relu'))
+cnn.add(Dense(units=3, activation='softmax'))  # Changed to 3 units and softmax for 3 classes
+import os
+print(os.listdir('/content/dataset'))
+
+cnn.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Create training_set and test_set using the image data generators
+# Point to the root directory containing class folders and use subset parameter
+training_set = train_datagen.flow_from_directory(
+    '/content/dataset/FMD_DATASET', # Root directory containing class folders
+    target_size=(64, 64),
+    batch_size=32,
+    class_mode='categorical', # Changed to 'categorical' for 3 classes
+    subset='training' # Specify this is the training subset
+)
+
+test_set = test_datagen.flow_from_directory(
+    '/content/dataset/FMD_DATASET', # Root directory containing class folders
+    target_size=(64, 64),
+    batch_size=32,
+    class_mode='categorical', # Changed to 'categorical' for 3 classes
+    subset='validation' # Specify this is the validation (test) subset
+)
+
+cnn.fit(x=training_set, validation_data=test_set, epochs=25)
+cnn.save('/content/drive/MyDrive/Content/mask_vision_model.h5')
